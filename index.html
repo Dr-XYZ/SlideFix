@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>投影片神器 (去黑邊版)</title>
+    <title>投影片神器 (終極版)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 15px; background: #f0f2f5; color: #333; }
         .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
@@ -21,9 +21,12 @@
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; }
         .btn { padding: 12px 20px; border-radius: 8px; border: none; font-size: 16px; cursor: pointer; font-weight: 500; transition: background 0.2s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-primary { background: #3182ce; color: white; width: 100%; }
-        .btn-pdf { background: #e53e3e; color: white; flex: 1; min-width: 140px; }
-        .btn-share { background: #38a169; color: white; flex: 1; min-width: 140px; }
+        
+        .btn-primary { background: #3182ce; color: white; width: 100%; } /* 藍色 */
+        .btn-warning { background: #dd6b20; color: white; width: 100%; margin-top: 5px;} /* 橘色 (重新掃描) */
+        
+        .btn-pdf { background: #e53e3e; color: white; flex: 1; min-width: 140px; } /* 紅色 */
+        .btn-share { background: #38a169; color: white; flex: 1; min-width: 140px; } /* 綠色 */
 
         /* 進度條 */
         #progress-container { margin-bottom: 20px; display: none; }
@@ -46,7 +49,7 @@
 <body>
 
 <div class="container">
-    <h1>📸 投影片神器 (去黑邊版)</h1>
+    <h1>📸 投影片神器 (終極版)</h1>
     
     <div class="controls">
         <div class="setting-group">
@@ -59,9 +62,15 @@
         </div>
 
         <input type="file" id="fileInput" accept="image/*" multiple disabled>
+        
         <button class="btn btn-primary" id="selectBtn" onclick="document.getElementById('fileInput').click()" disabled>
-            📂 選擇照片開始處理
+            📂 選擇照片
         </button>
+        
+        <button class="btn btn-warning hidden" id="rescanBtn" onclick="rescanImages()">
+            🔄 套用新設定並重新掃描
+        </button>
+
         <div id="status" style="margin-top:10px; font-size: 14px; color: #888;">⏳ 正在載入核心...</div>
 
         <div id="action-buttons" class="btn-group hidden">
@@ -100,26 +109,53 @@
         document.getElementById('selectBtn').disabled = false;
     }
 
+    // 監聽檔案選擇
     document.getElementById('fileInput').addEventListener('change', async (e) => {
+        startProcessing();
+    });
+
+    // 新增：重新掃描函式
+    function rescanImages() {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert("目前沒有已載入的照片！");
+            return;
+        }
+        startProcessing();
+    }
+
+    // 將處理邏輯抽取出來
+    async function startProcessing() {
         if (!cvReady) return;
-        const files = Array.from(e.target.files);
+        const fileInput = document.getElementById('fileInput');
+        const files = Array.from(fileInput.files);
+        
         if (files.length === 0) return;
 
-        // 取得使用者設定的裁切比例
+        // 取得目前的裁切值
         const cropPercent = parseInt(document.getElementById('cropInput').value) / 100;
 
+        // 重置 UI
         document.getElementById('gallery').innerHTML = '';
         document.getElementById('action-buttons').classList.add('hidden');
         document.getElementById('progress-container').style.display = 'block';
+        
+        // 顯示重新掃描按鈕 (如果是第一次執行，這行會讓按鈕跑出來)
+        document.getElementById('rescanBtn').classList.remove('hidden');
+        
         processedFiles = []; 
         
         await processBatch(files, cropPercent);
-    });
+    }
 
     async function processBatch(files, cropPercent) {
         const total = files.length;
         const statusText = document.getElementById('status-text');
         const progressFill = document.getElementById('progressFill');
+
+        // 暫時停用按鈕避免重複點擊
+        document.getElementById('selectBtn').disabled = true;
+        document.getElementById('rescanBtn').disabled = true;
 
         for (let i = 0; i < total; i++) {
             const file = files[i];
@@ -144,6 +180,10 @@
 
         statusText.innerText = "🎉 處理完成！";
         document.getElementById('action-buttons').classList.remove('hidden');
+        
+        // 恢復按鈕
+        document.getElementById('selectBtn').disabled = false;
+        document.getElementById('rescanBtn').disabled = false;
     }
 
     function processSingleImage(file, cropPercent) {
@@ -197,7 +237,6 @@
                     }
 
                     if (bestContour) {
-                        // 傳入 cropPercent 參數
                         warpPerspective(src, bestContour, dst, cropPercent);
                         bestContour.delete();
                     } else {
@@ -221,7 +260,6 @@
         });
     }
 
-    // 修改：加入 cropPercent 參數
     function warpPerspective(src, contour, dst, cropPercent) {
         let pts = [];
         for (let i = 0; i < 4; i++) {
@@ -230,11 +268,9 @@
         }
         let sortedPts = orderPoints(pts);
 
-        // --- 核心修改：內縮裁切邏輯 ---
         if (cropPercent > 0) {
             sortedPts = shrinkRect(sortedPts, cropPercent);
         }
-        // -------------------------
 
         let tl = sortedPts[0], tr = sortedPts[1], br = sortedPts[2], bl = sortedPts[3];
         let widthA = Math.hypot(br.x - bl.x, br.y - bl.y);
@@ -252,16 +288,12 @@
         srcTri.delete(); dstTri.delete(); transformM.delete();
     }
 
-    // 新增：將四個點往中心縮小的函式
     function shrinkRect(pts, percentage) {
-        // 計算中心點
         let cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) / 4;
         let cy = (pts[0].y + pts[1].y + pts[2].y + pts[3].y) / 4;
-
-        // 將每個點往中心移動
         return pts.map(p => {
             return {
-                x: cx + (p.x - cx) * (1 - percentage), // 距離縮短
+                x: cx + (p.x - cx) * (1 - percentage),
                 y: cy + (p.y - cy) * (1 - percentage)
             };
         });
@@ -304,7 +336,7 @@
             const pageHeight = doc.internal.pageSize.getHeight();
             doc.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
         }
-        doc.save("slides_clean.pdf");
+        doc.save("slides_final.pdf");
         btn.disabled = false;
         btn.innerText = "📄 下載 PDF";
     }
