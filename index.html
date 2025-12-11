@@ -3,24 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>投影片神器 (PDF/批量輸出)</title>
+    <title>投影片神器 (去黑邊版)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 15px; background: #f0f2f5; color: #333; }
         .container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         h1 { text-align: center; font-size: 1.4rem; margin-bottom: 20px; color: #2c3e50; }
         
         /* 控制區 */
-        .controls { text-align: center; padding: 25px; border: 2px dashed #cbd5e0; border-radius: 8px; background: #f8fafc; margin-bottom: 20px;}
+        .controls { text-align: center; padding: 20px; border: 2px dashed #cbd5e0; border-radius: 8px; background: #f8fafc; margin-bottom: 20px;}
         
+        /* 滑桿設定區 */
+        .setting-group { margin: 15px 0; padding: 10px; background: #edf2f7; border-radius: 6px; text-align: left; }
+        .setting-label { font-size: 14px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 5px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+
         /* 按鈕群組 */
         .btn-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 15px; }
-
         .btn { padding: 12px 20px; border-radius: 8px; border: none; font-size: 16px; cursor: pointer; font-weight: 500; transition: background 0.2s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        
         .btn-primary { background: #3182ce; color: white; width: 100%; }
-        .btn-pdf { background: #e53e3e; color: white; flex: 1; min-width: 140px; } /* 紅色 PDF 按鈕 */
-        .btn-share { background: #38a169; color: white; flex: 1; min-width: 140px; } /* 綠色 分享 按鈕 */
+        .btn-pdf { background: #e53e3e; color: white; flex: 1; min-width: 140px; }
+        .btn-share { background: #38a169; color: white; flex: 1; min-width: 140px; }
 
         /* 進度條 */
         #progress-container { margin-bottom: 20px; display: none; }
@@ -38,19 +41,26 @@
         .hidden { display: none; }
         input[type="file"] { display: none; }
     </style>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
 <div class="container">
-    <h1>📸 投影片神器 (PDF/批量版)</h1>
+    <h1>📸 投影片神器 (去黑邊版)</h1>
     
     <div class="controls">
-        <p style="margin-bottom: 15px; color: #666;">批次處理後，可轉存 PDF 或一次分享</p>
+        <div class="setting-group">
+            <div class="setting-label">
+                <span>✂️ 邊緣裁切程度 (去除黑邊)</span>
+                <span id="cropValue">3%</span>
+            </div>
+            <input type="range" id="cropInput" min="0" max="15" step="1" value="3" oninput="updateCropLabel(this.value)">
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">數值越大，往內切越多 (建議 2-5%)</div>
+        </div>
+
         <input type="file" id="fileInput" accept="image/*" multiple disabled>
         <button class="btn btn-primary" id="selectBtn" onclick="document.getElementById('fileInput').click()" disabled>
-            📂 選擇照片
+            📂 選擇照片開始處理
         </button>
         <div id="status" style="margin-top:10px; font-size: 14px; color: #888;">⏳ 正在載入核心...</div>
 
@@ -77,9 +87,11 @@
     let cvReady = false;
     const MAX_DIMENSION = 2000;
     const TARGET_RATIO = 4.0 / 3.0; 
-    
-    // 用來暫存處理好的檔案 Blob，方便最後打包
     let processedFiles = []; 
+
+    function updateCropLabel(val) {
+        document.getElementById('cropValue').innerText = val + "%";
+    }
 
     function onOpenCvReady() {
         cvReady = true;
@@ -93,16 +105,18 @@
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        // 重置
+        // 取得使用者設定的裁切比例
+        const cropPercent = parseInt(document.getElementById('cropInput').value) / 100;
+
         document.getElementById('gallery').innerHTML = '';
         document.getElementById('action-buttons').classList.add('hidden');
         document.getElementById('progress-container').style.display = 'block';
-        processedFiles = []; // 清空暫存
+        processedFiles = []; 
         
-        await processBatch(files);
+        await processBatch(files, cropPercent);
     });
 
-    async function processBatch(files) {
+    async function processBatch(files, cropPercent) {
         const total = files.length;
         const statusText = document.getElementById('status-text');
         const progressFill = document.getElementById('progressFill');
@@ -113,9 +127,8 @@
             progressFill.style.width = `${((i + 1) / total) * 100}%`;
 
             try {
-                const blob = await processSingleImage(file);
+                const blob = await processSingleImage(file, cropPercent);
                 if (blob) {
-                    // 存入陣列，給 PDF/Share 使用
                     processedFiles.push({
                         blob: blob,
                         name: `fixed_${i+1}_${file.name}`,
@@ -129,12 +142,11 @@
             await new Promise(resolve => requestAnimationFrame(resolve));
         }
 
-        statusText.innerText = "🎉 處理完成！請選擇輸出方式";
+        statusText.innerText = "🎉 處理完成！";
         document.getElementById('action-buttons').classList.remove('hidden');
     }
 
-    // --- 核心影像處理 (保持不變) ---
-    function processSingleImage(file) {
+    function processSingleImage(file, cropPercent) {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
@@ -185,10 +197,11 @@
                     }
 
                     if (bestContour) {
-                        warpPerspective(src, bestContour, dst);
+                        // 傳入 cropPercent 參數
+                        warpPerspective(src, bestContour, dst, cropPercent);
                         bestContour.delete();
                     } else {
-                        dst = src.clone(); // 沒抓到就用原圖，避免空白
+                        dst = src.clone();
                     }
 
                     cv.imshow('processCanvas', dst);
@@ -198,7 +211,7 @@
                         blurred.delete(); edged.delete(); dilated.delete();
                         contours.delete(); hierarchy.delete(); M.delete();
                         resolve(blob);
-                    }, 'image/jpeg', 0.85); // PDF 壓縮品質
+                    }, 'image/jpeg', 0.85);
 
                 } catch (e) {
                     reject(e);
@@ -208,24 +221,50 @@
         });
     }
 
-    function warpPerspective(src, contour, dst) {
+    // 修改：加入 cropPercent 參數
+    function warpPerspective(src, contour, dst, cropPercent) {
         let pts = [];
         for (let i = 0; i < 4; i++) {
             pts.push(contour.data32S[i * 2]);
             pts.push(contour.data32S[i * 2 + 1]);
         }
         let sortedPts = orderPoints(pts);
+
+        // --- 核心修改：內縮裁切邏輯 ---
+        if (cropPercent > 0) {
+            sortedPts = shrinkRect(sortedPts, cropPercent);
+        }
+        // -------------------------
+
         let tl = sortedPts[0], tr = sortedPts[1], br = sortedPts[2], bl = sortedPts[3];
         let widthA = Math.hypot(br.x - bl.x, br.y - bl.y);
         let widthB = Math.hypot(tr.x - tl.x, tr.y - tl.y);
         let maxWidth = Math.max(widthA, widthB);
         let finalWidth = maxWidth;
         let finalHeight = Math.floor(finalWidth / TARGET_RATIO);
+
         let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
         let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, finalWidth, 0, finalWidth, finalHeight, 0, finalHeight]);
+        
         let transformM = cv.getPerspectiveTransform(srcTri, dstTri);
         cv.warpPerspective(src, dst, transformM, new cv.Size(finalWidth, finalHeight), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+        
         srcTri.delete(); dstTri.delete(); transformM.delete();
+    }
+
+    // 新增：將四個點往中心縮小的函式
+    function shrinkRect(pts, percentage) {
+        // 計算中心點
+        let cx = (pts[0].x + pts[1].x + pts[2].x + pts[3].x) / 4;
+        let cy = (pts[0].y + pts[1].y + pts[2].y + pts[3].y) / 4;
+
+        // 將每個點往中心移動
+        return pts.map(p => {
+            return {
+                x: cx + (p.x - cx) * (1 - percentage), // 距離縮短
+                y: cy + (p.y - cy) * (1 - percentage)
+            };
+        });
     }
 
     function orderPoints(pts) {
@@ -248,7 +287,6 @@
         document.getElementById('gallery').appendChild(div);
     }
 
-    // --- 新功能：下載 PDF ---
     async function downloadPDF() {
         if (processedFiles.length === 0) return;
         const btn = document.getElementById('btnPdf');
@@ -256,40 +294,28 @@
         btn.innerText = "正在製作 PDF...";
 
         const { jsPDF } = window.jspdf;
-        // 建立 PDF，預設 A4
         const doc = new jsPDF({ orientation: "landscape" }); 
 
         for (let i = 0; i < processedFiles.length; i++) {
-            if (i > 0) doc.addPage(); // 第一頁不用加
-            
+            if (i > 0) doc.addPage();
             const fileData = processedFiles[i];
             const imgData = await blobToBase64(fileData.blob);
-            
-            // 計算比例填滿頁面
             const pageWidth = doc.internal.pageSize.getWidth();
             const pageHeight = doc.internal.pageSize.getHeight();
             doc.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
         }
-
-        doc.save("slides_fixed.pdf");
+        doc.save("slides_clean.pdf");
         btn.disabled = false;
         btn.innerText = "📄 下載 PDF";
     }
 
-    // --- 新功能：批次分享 (不用 ZIP) ---
     async function shareAllImages() {
         if (processedFiles.length === 0) return;
-        
-        // 檢查瀏覽器是否支援 Web Share API Level 2 (支援檔案分享)
         if (navigator.share && navigator.canShare) {
-            
-            // 將 Blob 轉回 File 物件
             const filesArray = processedFiles.map(f => 
                 new File([f.blob], f.name, { type: "image/jpeg" })
             );
-
             try {
-                // 一次分享所有檔案
                 await navigator.share({
                     files: filesArray,
                     title: '投影片處理結果',
@@ -299,7 +325,7 @@
                 console.log('分享取消或失敗', error);
             }
         } else {
-            alert("您的瀏覽器不支援批次分享功能 (iOS 請使用 Safari)");
+            alert("您的瀏覽器不支援批次分享功能");
         }
     }
 
@@ -310,7 +336,6 @@
             reader.readAsDataURL(blob);
         });
     }
-
 </script>
 </body>
 </html>
