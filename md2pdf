@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Markdown to PDF</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
+            --border-color: #e2e8f0;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-color);
+        }
+
+        /* 頂部導覽列 */
+        nav {
+            height: 60px;
+            background: #fff;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .logo { font-weight: 700; color: var(--primary-color); font-size: 1.2rem; }
+
+        .actions { display: flex; gap: 10px; }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            background: #white;
+            transition: all 0.2s;
+        }
+
+        .btn-primary { background: var(--primary-color); color: white; border: none; }
+        .btn-primary:hover { background: #1d4ed8; }
+
+        /* 主容器 */
+        main {
+            display: flex;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
+
+        .pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: white;
+        }
+
+        .pane-header {
+            padding: 8px 15px;
+            background: #f1f5f9;
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* 編輯器 */
+        #editor {
+            flex: 1;
+            padding: 20px;
+            border: none;
+            resize: none;
+            outline: none;
+            font-family: 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 15px;
+            line-height: 1.6;
+            color: #334155;
+        }
+
+        /* 預覽區 */
+        #preview-container {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+            border-left: 1px solid var(--border-color);
+        }
+
+        /* Markdown 樣式定義 */
+        .markdown-body {
+            max-width: 800px;
+            margin: 0 auto;
+            color: #1a202c;
+            line-height: 1.7;
+        }
+        .markdown-body h1 { border-bottom: 2px solid #edf2f7; padding-bottom: 10px; }
+        .markdown-body pre { background: #f4f4f4; padding: 15px; border-radius: 8px; overflow-x: auto; }
+        .markdown-body code { font-family: monospace; background: #f1f5f9; padding: 2px 4px; border-radius: 4px; }
+        .markdown-body table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        .markdown-body th, .markdown-body td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+        .markdown-body blockquote { border-left: 4px solid var(--primary-color); margin: 0; padding-left: 20px; color: #4a5568; font-style: italic; }
+
+        @media print {
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="no-print">
+        <div class="logo">MD2PDF Pro</div>
+        <div class="actions">
+            <input type="file" id="fileInput" style="display: none;" accept=".md">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">匯入檔案</button>
+            <button class="btn btn-primary" onclick="generatePDF()">導出 PDF</button>
+        </div>
+    </nav>
+
+    <main>
+        <div class="pane">
+            <div class="pane-header">Markdown Editor</div>
+            <textarea id="editor" placeholder="在此開始撰寫內容..."></textarea>
+        </div>
+        
+        <div class="pane">
+            <div class="pane-header">PDF Preview</div>
+            <div id="preview-container">
+                <div id="preview" class="markdown-body"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const fileInput = document.getElementById('fileInput');
+
+        // 配置 Marked 轉譯選項
+        marked.setOptions({
+            highlight: function(code, lang) {
+                const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                return hljs.highlight(code, { language }).value;
+            },
+            breaks: true, // 支援換行符號
+            gfm: true     // 支援 GitHub Flavored Markdown
+        });
+
+        // 更新預覽
+        function updatePreview() {
+            const content = editor.value;
+            preview.innerHTML = marked.parse(content);
+        }
+
+        editor.addEventListener('input', updatePreview);
+
+        // 預設內容
+        editor.value = `# 歡迎使用 MD2PDF
+
+這是一個專業的 Markdown 轉 PDF 工具。
+
+### 核心功能
+1. **即時預覽**：隨寫即看。
+2. **語法高亮**：支援多種程式碼：
+\`\`\`python
+def hello_world():
+    print("Hello Markdown to PDF!")
+\`\`\`
+3. **表格支持**：
+| 項目 | 狀態 |
+| :--- | :--- |
+| PDF 導出 | 已完成 |
+| 中文支援 | 完美支援 |
+
+> 試著點擊右上角的「導出 PDF」按鈕來查看效果。`;
+        updatePreview();
+
+        // 讀取檔案
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                editor.value = e.target.result;
+                updatePreview();
+            };
+            reader.readAsText(file);
+        });
+
+        // 導出 PDF
+        async function generatePDF() {
+            const btn = document.querySelector('.btn-primary');
+            btn.textContent = '處理中...';
+            btn.disabled = true;
+
+            const element = document.getElementById('preview');
+            const opt = {
+                margin:       [15, 15],
+                filename:     'document.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+
+            try {
+                await html2pdf().set(opt).from(element).save();
+            } catch (err) {
+                console.error('PDF Error:', err);
+                alert('導出失敗，請檢查控制台。');
+            } finally {
+                btn.textContent = '導出 PDF';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
