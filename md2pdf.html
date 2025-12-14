@@ -3,122 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MD2PDF Final Solution</title>
+    <title>MD2PDF - 原生排版核心</title>
     
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+
+    <style>
+        /* --- 系統層級設定 --- */
+        :root {
+            --editor-bg: #1e1e1e;
+            --editor-text: #d4d4d4;
+            --preview-bg: #525659;
+            --paper-width: 210mm;
+            --paper-padding: 20mm;
+        }
+
+        * { box-sizing: border-box; }
+        
+        body { 
+            margin: 0; height: 100vh; display: flex; flex-direction: column; 
+            font-family: -apple-system, system-ui, sans-serif; 
+            background: var(--preview-bg);
+            overflow: hidden; /* 防止主視窗出現雙重捲軸 */
+        }
+
+        /* --- 頂部導航列 (UI) --- */
+        header {
+            height: 50px; background: #2d2d2d; color: white; display: flex; 
+            align-items: center; justify-content: space-between; padding: 0 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
+        }
+        
+        .btn {
+            background: #007acc; color: white; border: none; padding: 8px 16px; 
+            border-radius: 4px; cursor: pointer; font-weight: bold; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 5px; transition: 0.2s;
+        }
+        .btn:hover { background: #0062a3; }
+
+        /* --- 主工作區 --- */
+        .workspace { display: flex; flex: 1; overflow: hidden; }
+
+        /* 左側：編輯器 */
+        .editor-pane { 
+            width: 40%; display: flex; flex-direction: column; 
+            border-right: 1px solid #444; background: var(--editor-bg);
+        }
+        
+        textarea {
+            flex: 1; width: 100%; background: transparent; color: var(--editor-text);
+            border: none; padding: 20px; resize: none; outline: none;
+            font-family: 'Consolas', monospace; font-size: 14px; line-height: 1.6;
+        }
+
+        /* 右側：預覽區 (模擬 PDF 閱讀器) */
+        .preview-pane { 
+            width: 60%; overflow-y: auto; display: flex; flex-direction: column; 
+            align-items: center; padding: 30px; background: var(--preview-bg);
+        }
+
+        /* --- 📄 A4 紙張模擬 (核心) --- */
+        /* 這是你在螢幕上看到的樣子，我們盡量讓它長得跟列印出來一樣 */
+        #paper {
+            background: white;
+            width: var(--paper-width);
+            min-height: 297mm;
+            padding: var(--paper-padding);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            color: black;
+            font-size: 12pt; /* 標準列印字號 */
+            line-height: 1.6;
+        }
+
+        /* --- 排版樣式 (Markdown 轉出的 HTML) --- */
+        #paper h1 { border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 0; }
+        #paper h2 { border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 2em; }
+        #paper blockquote { border-left: 4px solid #ccc; padding-left: 15px; color: #666; margin: 1em 0; }
+        #paper pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; border: 1px solid #ddd; }
+        #paper code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 0.9em; }
+        
+        /* 表格樣式 */
+        #paper table { 
+            width: 100%; border-collapse: collapse; margin: 1em 0; 
+            border: 2px solid black; 
+        }
+        #paper th, #paper td { border: 1px solid #999; padding: 8px; text-align: left; }
+        #paper th { background-color: #eee; -webkit-print-color-adjust: exact; } /* 強制列印背景色 */
+        
+        /* 圖片 */
+        #paper img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
+
+        /* --- 🖨️ 列印專用 CSS (Media Print) --- */
+        /* 這才是解決分頁問題的關鍵 */
+        @media print {
+            /* 1. 隱藏所有 UI，只留紙張 */
+            body * { visibility: hidden; }
+            #paper, #paper * { visibility: visible; }
+            
+            /* 2. 重置佈局，把紙張貼齊視窗左上角 */
+            body { background: white; height: auto; overflow: visible; }
+            .preview-pane { display: block; padding: 0; margin: 0; background: white; width: 100%; height: auto; overflow: visible; }
+            
+            #paper {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 0; /* 讓瀏覽器控制邊距，或者你在這裡自己留 */
+                box-shadow: none;
+                min-height: 0;
+            }
+
+            /* 3. 設定紙張大小 */
+            @page {
+                size: A4;
+                margin: 20mm; /* 這是 PDF 的物理邊距 */
+            }
+
+            /* 4. 🔥 核心：防止內容切斷 🔥 */
+            p, h1, h2, h3, li, blockquote, pre, img, table, .math-display {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            
+            /* 5. 表格跨頁重複標題 */
+            thead { display: table-header-group; }
+            tr { page-break-inside: avoid; }
+        }
+
+        /* MathJax 調整 */
+        mjx-container { font-size: 110% !important; }
+    </style>
+
     <script>
         window.MathJax = {
-            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
-            svg: { fontCache: 'none' },
+            tex: { 
+                inlineMath: [['$', '$'], ['\\(', '\\)']], 
+                displayMath: [['$$', '$$']] 
+            },
             startup: { typeset: false }
         };
     </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
-
-    <style>
-        /* Reset */
-        * { box-sizing: border-box; }
-        body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #222; font-family: sans-serif; overflow: hidden; }
-        
-        /* 介面佈局 */
-        header { 
-            height: 60px; background: #111; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #333; z-index: 10;
-        }
-
-        .workspace { display: flex; flex: 1; overflow: hidden; position: relative; }
-        
-        /* 編輯器 */
-        .editor-box { width: 50%; height: 100%; border-right: 1px solid #333; display: flex; flex-direction: column; }
-        textarea { 
-            flex: 1; width: 100%; background: #1e1e1e; color: #ccc; border: none; padding: 20px; 
-            resize: none; outline: none; font-family: 'Consolas', monospace; font-size: 15px; line-height: 1.6;
-        }
-
-        /* 預覽區容器 (有捲軸) */
-        .preview-box { 
-            width: 50%; height: 100%; background: #525659; overflow-y: auto; 
-            display: flex; justify-content: center; padding: 40px 20px;
-            position: relative;
-        }
-
-        /* A4 紙張 (主角) */
-        #paper {
-            background: white;
-            width: 210mm;
-            min-height: 297mm;
-            padding: 20mm;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            color: #333;
-            font-size: 16px;
-            line-height: 1.6;
-            /* 讓內容撐開 */
-            height: auto; 
-        }
-
-        /* 內容樣式 */
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; border: 2px solid #000; }
-        th, td { border: 1px solid #666; padding: 8px 12px; }
-        th { background: #f0f0f0; }
-        img { max-width: 100%; }
-        h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        
-        /* 防切斷設定 */
-        p, h1, h2, h3, li, table, pre, .math-block { 
-            page-break-inside: avoid; break-inside: avoid; 
-        }
-
-        /* Loading 遮罩 */
-        #loading-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); z-index: 99999;
-            display: none; flex-direction: column; justify-content: center; align-items: center; color: white;
-        }
-    </style>
 </head>
 <body>
 
-    <div id="loading-overlay">
-        <div style="font-size: 24px; font-weight: bold; margin-bottom: 15px;">正在生成 PDF...</div>
-        <div>處理數學公式與排版中，請勿關閉</div>
-    </div>
-
     <header>
-        <div style="font-weight: bold; font-size: 18px;">MD2PDF V12 (移花接木版)</div>
-        <button onclick="startDownload()" style="cursor:pointer; background:#2980b9; color:white; border:none; padding:10px 25px; border-radius:4px; font-weight:bold; font-size: 14px;">
-            下載 PDF
+        <div style="font-weight: bold; font-size: 1.1rem;">MD2PDF 原生核心版</div>
+        <button class="btn" onclick="window.print()">
+            🖨️ 轉存為 PDF
         </button>
     </header>
 
     <div class="workspace">
-        <div class="editor-box">
-            <textarea id="input"># 最終測試
+        <div class="editor-pane">
+            <textarea id="input" placeholder="請在此輸入 Markdown..."># 物理期末報告
 
-如果不成功，我就把鍵盤吃掉。
+## 1. 實驗目的 (分頁測試)
+測試瀏覽器原生引擎是否能正確處理 **分頁**，不會將文字或公式切斷。
 
-## 1. 座標與切邊測試
-請檢查左邊是否有留白，內容是否完整。
-因為我們使用了「移花接木法」，這張紙在生成的瞬間是被移到 (0,0) 的，理論上不可能被切邊。
+## 2. 馬克士威方程組
+請檢查下方的公式在 PDF 中是否清晰（向量字體），且沒有跑版。
 
-## 2. 表格測試
-| 測試項目 | 結果 |
-| :--- | :--- |
-| 空白頁 | ❌ Fixed |
-| 切邊 | ❌ Fixed |
-| 數學公式 | ✅ Rendered |
-
-## 3. 數學公式
 $$
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+\begin{aligned}
+\nabla \cdot \mathbf{E} &= \frac{\rho}{\varepsilon_0} \\
+\nabla \cdot \mathbf{B} &= 0 \\
+\nabla \times \mathbf{E} &= -\frac{\partial \mathbf{B}}{\partial t} \\
+\nabla \times \mathbf{B} &= \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}
+\end{aligned}
 $$
 
-## 4. 長內容測試
-這是一段很長很長的內容，用來測試分頁效果。
-Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+## 3. 長表格測試 (自動分頁與表頭)
+當表格跨越頁面時，表頭應該在第二頁自動重複出現。
+
+| ID | 參數名稱 | 數值 | 備註 |
+|:---|:---|:---|:---|
+| 01 | Alpha | 0.05 | 顯著性水準 |
+| 02 | Beta  | 0.80 | 檢定力 |
+| 03 | Gamma | 1.25 | 修正係數 |
+| 04 | Delta | 3.14 | 圓周率近似 |
+| 05 | Epsilon| 1e-5| 誤差容忍度 |
+| 06 | Zeta  | 0.99 | 阻尼比 |
+| 07 | Eta   | 0.33 | 效率係數 |
+| 08 | Theta | 45.0 | 角度參數 |
+| 09 | Iota  | 1.00 | 虛數單位 |
+| 10 | Kappa | 2.50 | 曲率 |
+| 11 | Lambda| 550  | 波長 (nm) |
+| 12 | Mu    | 0.01 | 摩擦係數 |
+
+## 4. 結論
+使用 `window.print()` 配合 `@media print` 樣式，是前端生成高品質 PDF 的唯一正解。
             </textarea>
         </div>
-        <div class="preview-box" id="preview-container">
+
+        <div class="preview-pane">
             <div id="paper"></div>
         </div>
     </div>
@@ -126,144 +205,32 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit.
     <script>
         const input = document.getElementById('input');
         const paper = document.getElementById('paper');
-        const previewContainer = document.getElementById('preview-container');
-        const overlay = document.getElementById('loading-overlay');
 
-        // --- 1. 渲染引擎 ---
+        // 渲染函數
         function render() {
-            let md = input.value;
-            let mathStore = [];
+            const md = input.value;
             
-            // 安全佔位符
-            md = md.replace(/\$\$([\s\S]*?)\$\$/g, (m, t) => {
-                mathStore.push({t, type:'block'}); return `MATHBLOCK${mathStore.length-1}END`;
-            });
-            md = md.replace(/\$([^\$\n]+?)\$/g, (m, t) => {
-                mathStore.push({t, type:'inline'}); return `MATHINLINE${mathStore.length-1}END`;
-            });
-
+            // 1. Markdown -> HTML
             let html = marked.parse(md);
-
-            html = html.replace(/MATHBLOCK(\d+)END/g, (m, id) => `<div class="math-block">$$${mathStore[id].t}$$</div>`);
-            html = html.replace(/MATHINLINE(\d+)END/g, (m, id) => `$${mathStore[id].t}$`);
-
+            
+            // 2. 更新 DOM
             paper.innerHTML = html;
 
-            if(window.MathJax && window.MathJax.typesetPromise) {
-                window.MathJax.typesetPromise([paper]);
+            // 3. MathJax 渲染 (異步)
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([paper]).catch(err => console.error(err));
             }
         }
 
-        // 防抖動輸入監聽
+        // 監聽輸入 (防抖動)
         let timer;
-        input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 300); });
-        setTimeout(render, 500);
+        input.addEventListener('input', () => {
+            clearTimeout(timer);
+            timer = setTimeout(render, 300);
+        });
 
-
-        // --- 2. 轉圖片 (保證 MathJax 不跑版) ---
-        async function rasterizeMath() {
-            const svgs = paper.querySelectorAll('mjx-container svg');
-            for(let svg of svgs) {
-                try {
-                    const rect = svg.getBoundingClientRect();
-                    if(rect.width < 1) continue;
-
-                    const xml = new XMLSerializer().serializeToString(svg);
-                    const svg64 = btoa(unescape(encodeURIComponent(xml)));
-                    const img = new Image();
-                    img.src = 'data:image/svg+xml;base64,' + svg64;
-                    await new Promise(r => img.onload = r);
-
-                    const canvas = document.createElement('canvas');
-                    canvas.width = rect.width * 3;
-                    canvas.height = rect.height * 3;
-                    const ctx = canvas.getContext('2d');
-                    ctx.scale(3, 3);
-                    ctx.drawImage(img, 0, 0);
-
-                    const finalImg = document.createElement('img');
-                    finalImg.src = canvas.toDataURL('image/png');
-                    finalImg.style.width = rect.width + 'px';
-                    
-                    const wrapper = svg.closest('mjx-container');
-                    if(wrapper) wrapper.replaceWith(finalImg);
-                } catch(e) { console.error(e); }
-            }
-        }
-
-        // --- 3. 下載 PDF (核心：移花接木大法) ---
-        async function startDownload() {
-            overlay.style.display = 'flex';
-            
-            // A. 保存原始 HTML (因為轉圖會破壞可編輯性)
-            const backupHTML = paper.innerHTML;
-
-            // B. 轉圖片
-            await rasterizeMath();
-
-            // C. 🔥 移花接木：把 #paper 拔出來，貼到 body 最頂層 🔥
-            // 這一步消除了所有父容器的捲軸偏移、overflow隱藏等問題
-            const originalParent = paper.parentNode;
-            const originalNextSibling = paper.nextSibling; // 記住位置以便放回去
-            
-            document.body.appendChild(paper);
-            
-            // 強制設定樣式，確保 html2canvas 看到的只有這張紙，且位置絕對正確
-            paper.style.position = 'absolute';
-            paper.style.left = '0';
-            paper.style.top = '0';
-            paper.style.zIndex = '9999';
-            paper.style.margin = '0';
-            // 暫時移除 padding，由 PDF margin 接管 (防止切邊)
-            const originalPadding = paper.style.padding;
-            paper.style.padding = '0';
-
-            try {
-                const opt = {
-                    margin:       [20, 20, 20, 20], // 在 PDF 裡加回 20mm 邊距
-                    filename:     'md2pdf_final.pdf',
-                    image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { 
-                        scale: 2, 
-                        useCORS: true,
-                        scrollX: 0,
-                        scrollY: 0,
-                        windowWidth: 1000 // 鎖定寬度防止變形
-                    },
-                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-                };
-
-                // 對這個已經移到頂層的 paper 進行截圖
-                await html2pdf().set(opt).from(paper).save();
-
-            } catch (e) {
-                alert('生成錯誤: ' + e.message);
-            } finally {
-                // D. 歸位：把紙放回去
-                if (originalNextSibling) {
-                    originalParent.insertBefore(paper, originalNextSibling);
-                } else {
-                    originalParent.appendChild(paper);
-                }
-                
-                // 還原樣式
-                paper.style.position = '';
-                paper.style.left = '';
-                paper.style.top = '';
-                paper.style.zIndex = '';
-                paper.style.margin = '';
-                paper.style.padding = '20mm'; // 加回螢幕預覽用的 padding
-                
-                // 還原 HTML (恢復 SVG 公式)
-                paper.innerHTML = backupHTML;
-                if(window.MathJax && window.MathJax.typesetPromise) {
-                    window.MathJax.typesetPromise([paper]);
-                }
-                
-                overlay.style.display = 'none';
-            }
-        }
+        // 初始化
+        render();
     </script>
 </body>
 </html>
