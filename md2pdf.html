@@ -3,167 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MD2PDF + LaTeX 數學公式版</title>
+    <title>MD2PDF</title>
     
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
         window.MathJax = {
-            tex: {
-                inlineMath: [['$', '$'], ['\\(', '\\)']],
-                displayMath: [['$$', '$$'], ['\\[', '\\]']],
-                processEscapes: true
-            },
-            svg: {
-                fontCache: 'global'
-            },
-            startup: {
-                typeset: false // 手動觸發渲染
-            }
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
+            svg: { fontCache: 'global' },
+            startup: { typeset: false }
         };
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     
     <style>
-        :root {
-            --primary-color: #673ab7; /* 紫色系 */
-            --bg-color: #f3f4f6;
-            --border-color: #d1d5db;
+        /* --- 全局變數 --- */
+        :root { --primary: #009688; --gray: #f0f2f5; --border: #dcdcdc; }
+        
+        /* --- 螢幕顯示樣式 (Screen Style) --- */
+        body { 
+            margin: 0; display: flex; flex-direction: column; height: 100vh; 
+            font-family: 'Segoe UI', sans-serif; background: var(--gray); overflow: hidden;
+        }
+        
+        header { 
+            background: var(--primary); color: white; padding: 0 20px; height: 60px;
+            display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
 
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            margin: 0;
-            background-color: var(--bg-color);
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        header {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 1rem 1.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-
-        .container {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        /* 編輯與預覽區 */
-        .pane {
-            width: 50%;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border-color);
-        }
-
-        .pane-header {
-            background: #e5e7eb;
-            padding: 8px 15px;
-            font-weight: bold;
-            font-size: 0.9rem;
-            color: #374151;
-            border-bottom: 1px solid var(--border-color);
+        .main-container { display: flex; flex: 1; height: calc(100vh - 60px); }
+        
+        .pane { width: 50%; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+        
+        .pane-label {
+            background: #e0e0e0; padding: 5px 15px; font-size: 12px; font-weight: bold; color: #555;
+            text-transform: uppercase; letter-spacing: 1px;
         }
 
         textarea {
-            flex: 1;
-            resize: none;
-            border: none;
-            padding: 20px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 15px;
-            line-height: 1.6;
-            outline: none;
+            flex: 1; padding: 20px; resize: none; border: none; outline: none;
+            font-family: 'Consolas', monospace; font-size: 14px; line-height: 1.5; background: #fafafa;
         }
 
-        #preview-container {
-            flex: 1;
-            overflow-y: auto;
-            background: white;
-            padding: 20px;
-        }
+        #preview-scroll { flex: 1; padding: 30px; overflow-y: auto; background: white; }
 
-        /* 用於生成 PDF 的內容容器 */
-        #content {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        button {
-            background-color: white;
-            color: var(--primary-color);
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        button:hover { background-color: #f0f0f0; }
-
-        /* 樣式優化 */
-        #content h1, #content h2 { border-bottom: 1px solid #eee; padding-bottom: 0.3em; margin-top: 1.5em; }
-        #content code { background-color: #f1f1f1; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
-        #content pre { background-color: #282c34; color: #abb2bf; padding: 15px; border-radius: 5px; overflow-x: auto; }
-        #content blockquote { border-left: 4px solid #ddd; padding-left: 15px; color: #666; }
-        #content table { border-collapse: collapse; width: 100%; margin: 15px 0; }
-        #content th, #content td { border: 1px solid #ddd; padding: 8px; }
+        /* --- 文件的核心樣式 (Markdown 內容) --- */
+        #content { max-width: 800px; margin: 0 auto; color: #333; line-height: 1.6; }
         
-        /* MathJax 樣式調整 */
-        mjx-container { font-size: 110% !important; }
+        /* 表格關鍵樣式 */
+        table { 
+            width: 100%; border-collapse: collapse; margin: 20px 0; 
+            border: 2px solid #333; /* 外框加粗 */
+        }
+        th, td { border: 1px solid #888; padding: 8px 12px; text-align: left; }
+        th { background-color: #f2f2f2; border-bottom: 2px solid #333; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+
+        h1, h2, h3 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 0.3em; margin-top: 1.5em; }
+        code { background: #eee; padding: 2px 5px; border-radius: 3px; font-family: monospace; color: #d63384; }
+        pre { background: #282c34; color: #abb2bf; padding: 15px; border-radius: 5px; overflow-x: auto; page-break-inside: avoid; }
+        blockquote { border-left: 4px solid var(--primary); padding-left: 15px; color: #666; background: #f9f9f9; margin: 10px 0; }
+        img { max-width: 100%; height: auto; }
+
+        /* 按鈕樣式 */
+        .btn {
+            background: white; color: var(--primary); border: none; padding: 8px 16px;
+            border-radius: 4px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block;
+        }
+        .btn:hover { background: #e0f2f1; }
+
+        /* --- 🖨️ 關鍵：列印模式 (Print Mode) --- 
+           當用戶按下 Ctrl+P 或點擊按鈕時，CSS 會變成這樣
+        */
+        @media print {
+            /* 隱藏介面元素 */
+            header, .pane-label, .pane:first-child, ::-webkit-scrollbar { 
+                display: none !important; 
+            }
+
+            /* 重置佈局 */
+            body, .main-container, .pane, #preview-scroll { 
+                height: auto; overflow: visible; display: block; background: white; margin: 0; padding: 0;
+            }
+
+            /* 預覽區佔滿全版 */
+            .pane { width: 100%; border: none; }
+            #preview-scroll { padding: 0; }
+            #content { max-width: 100%; margin: 0; }
+
+            /* ★★★ 核心魔法：表格分頁設定 ★★★ */
+            table { page-break-inside: auto; }
+            tr    { page-break-inside: avoid; page-break-after: auto; }
+            thead { display: table-header-group; } /* 這行指示瀏覽器在每一頁重複表頭 */
+            tfoot { display: table-footer-group; }
+            
+            /* 其他分頁控制 */
+            h1, h2, h3 { page-break-after: avoid; } /* 標題後不換頁 */
+            pre, blockquote, img, mjx-container { page-break-inside: avoid; } /* 內容不切斷 */
+
+            /* 設定紙張邊距 (隱藏瀏覽器預設頁眉頁尾) */
+            @page {
+                margin: 20mm;
+                size: A4;
+            }
+        }
     </style>
 </head>
 <body>
-
     <header>
-        <div style="font-size: 1.2rem; font-weight: bold;">MD2PDF + LaTeX $\sum$</div>
-        <button onclick="downloadPDF()">下載 PDF</button>
+        <div style="font-size: 1.2rem; font-weight: bold;">MD2PDF 專業版 (重複表頭)</div>
+        <button class="btn" onclick="window.print()">🖨️ 列印 / 另存 PDF</button>
     </header>
 
-    <div class="container">
+    <div class="main-container">
         <div class="pane">
-            <div class="pane-header">Markdown 輸入</div>
-            <textarea id="editor" placeholder="輸入 Markdown 與 LaTeX..."># 物理公式測試
+            <div class="pane-label">Markdown Editor</div>
+            <textarea id="editor"># 長表格測試
 
-這是一個行內公式：$E = mc^2$。
+這個範例展示了「原生列印」如何處理跨頁表頭重複。
 
-下面是一個區塊公式 (Block Math)：
+## 財務報表 (長表格)
+
+請注意：當表格跨越到第二頁時，**表頭 (項目/數值/備註)** 會自動重複顯示。
+
+| 項目 (ID) | 數值 (Value) | 備註 (Notes) | 狀態 (Status) |
+| :--- | :--- | :--- | :--- |
+| Data 001 | $1,000 | 這是測試數據 | ✅ OK |
+| Data 002 | $2,500 | 自動分頁測試 | ✅ OK |
+| Data 003 | $3,200 | 數學公式 $\sqrt{x}$ | ⚠️ Low |
+| Data 004 | $4,100 | 重複表頭測試 | ✅ OK |
+| Data 005 | $5,000 | 應該在第一頁 | ✅ OK |
+| Data 006 | $1,000 | 測試數據填充 | ✅ OK |
+| Data 007 | $2,500 | 測試數據填充 | ✅ OK |
+| Data 008 | $3,200 | 測試數據填充 | ⚠️ Low |
+| Data 009 | $4,100 | 測試數據填充 | ✅ OK |
+| Data 010 | $5,000 | 測試數據填充 | ✅ OK |
+| Data 011 | $1,000 | 測試數據填充 | ✅ OK |
+| Data 012 | $2,500 | 測試數據填充 | ✅ OK |
+| Data 013 | $3,200 | 測試數據填充 | ⚠️ Low |
+| Data 014 | $4,100 | 測試數據填充 | ✅ OK |
+| Data 015 | $5,000 | 測試數據填充 | ✅ OK |
+| Data 016 | $1,000 | 測試數據填充 | ✅ OK |
+| Data 017 | $2,500 | 測試數據填充 | ✅ OK |
+| Data 018 | $3,200 | 測試數據填充 | ⚠️ Low |
+| Data 019 | $4,100 | 測試數據填充 | ✅ OK |
+| Data 020 | $5,000 | 測試數據填充 | ✅ OK |
+| Data 021 | $1,000 | 測試數據填充 | ✅ OK |
+| Data 022 | $2,500 | 測試數據填充 | ✅ OK |
+| Data 023 | $3,200 | 測試數據填充 | ⚠️ Low |
+| Data 024 | $4,100 | 測試數據填充 | ✅ OK |
+| Data 025 | $5,000 | 測試數據填充 | ✅ OK |
+| Data 026 | $1,000 | 測試數據填充 | ✅ OK |
+| Data 027 | $2,500 | 測試數據填充 | ✅ OK |
+| Data 028 | $3,200 | 測試數據填充 | ⚠️ Low |
+| Data 029 | $4,100 | 測試數據填充 | ✅ OK |
+| Data 030 | $5,000 | 測試數據填充 | ✅ OK |
+| Data 031 | $1,000 | 測試數據填充 | ✅ OK |
+| Data 032 | $2,500 | 測試數據填充 | ✅ OK |
+| Data 033 | $3,200 | 測試數據填充 | ⚠️ Low |
+| Data 034 | $4,100 | 測試數據填充 | ✅ OK |
+| Data 035 | $5,000 | 測試數據填充 | ✅ OK |
+| Data 036 | $1,000 | 測試數據填充 | ✅ OK |
+| Data 037 | $2,500 | 測試數據填充 | ✅ OK |
+| Data 038 | $3,200 | 測試數據填充 | ⚠️ Low |
+| Data 039 | $4,100 | 測試數據填充 | ✅ OK |
+| Data 040 | $5,000 | 測試數據填充 | ✅ OK |
+
+## 物理公式
 
 $$
-x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+F = G \frac{m_1 m_2}{r^2}
 $$
-
-## 矩陣範例
-
-$$
-\begin{bmatrix}
-1 & 2 & 3 \\
-a & b & c
-\end{bmatrix}
-$$
-
-## 複雜積分
-
-$$
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
-$$
-
-- 支援 Markdown 語法
-- 支援 **粗體** 與 *斜體*
             </textarea>
         </div>
+        
         <div class="pane">
-            <div class="pane-header">即時預覽</div>
-            <div id="preview-container">
+            <div class="pane-label">Live Preview</div>
+            <div id="preview-scroll">
                 <div id="content"></div>
             </div>
         </div>
@@ -172,88 +187,39 @@ $$
     <script>
         const editor = document.getElementById('editor');
         const content = document.getElementById('content');
-        
-        // 用來暫存數學公式的 Map，防止 marked.js 把 LaTeX 語法吃掉
         let mathCache = {};
 
-        // 1. 轉義數學公式 (在 marked 解析前執行)
+        // 數學公式保護與還原邏輯
         function escapeMath(text) {
-            mathCache = {}; // 清空緩存
-            let counter = 0;
-            
-            // 替換區塊公式 $$...$$
-            text = text.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
-                const key = `MATH_BLOCK_${counter++}`;
-                mathCache[key] = { tex: tex, display: true };
-                return key;
-            });
-
-            // 替換行內公式 $...$
-            text = text.replace(/\$([^\$\n]+?)\$/g, (match, tex) => {
-                const key = `MATH_INLINE_${counter++}`;
-                mathCache[key] = { tex: tex, display: false };
-                return key;
-            });
-
+            mathCache = {}; let i = 0;
+            text = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, t) => { mathCache[`MB_${i}`] = {t, d:true}; return `MB_${i++}`; });
+            text = text.replace(/\$([^\$\n]+?)\$/g, (m, t) => { mathCache[`MI_${i}`] = {t, d:false}; return `MI_${i++}`; });
             return text;
         }
 
-        // 2. 還原數學公式 (在 marked 解析後執行)
         function restoreMath(html) {
-            for (const key in mathCache) {
-                const item = mathCache[key];
-                // 這裡我們直接還原成 MathJax 認識的原始格式
-                const originalTex = item.display 
-                    ? `$$${item.tex}$$` 
-                    : `$${item.tex}$`;
-                html = html.replace(key, originalTex);
-            }
+            for (let k in mathCache) html = html.replace(k, mathCache[k].d ? `$$${mathCache[k].t}$$` : `$${mathCache[k].t}$`);
             return html;
         }
 
-        // 3. 主渲染函數
+        // 渲染函數
         function render() {
-            const rawMarkdown = editor.value;
-            
-            // 步驟 A: 保護 LaTeX
-            const escapedMarkdown = escapeMath(rawMarkdown);
-            
-            // 步驟 B: 轉換 Markdown 為 HTML
-            let html = marked.parse(escapedMarkdown);
-            
-            // 步驟 C: 還原 LaTeX
+            let md = editor.value;
+            md = escapeMath(md);
+            // 讓 marked 解析表格
+            let html = marked.parse(md);
             html = restoreMath(html);
-            
-            // 步驟 D: 更新 DOM
             content.innerHTML = html;
-
-            // 步驟 E: 觸發 MathJax 渲染
-            if (window.MathJax && window.MathJax.typesetPromise) {
-                window.MathJax.typesetPromise([content]).catch((err) => console.log(err));
+            
+            // 觸發 MathJax
+            if(window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([content]).catch(()=>{});
             }
         }
 
-        // 監聽輸入
         editor.addEventListener('input', render);
-        
         // 初始化
-        // 稍微延遲以確保 MathJax 載入
-        setTimeout(render, 500);
-
-        // 4. 下載 PDF
-        function downloadPDF() {
-            const element = document.getElementById('content');
-            
-            const opt = {
-                margin:       [10, 10, 10, 10],
-                filename:     'latex-document.pdf',
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true }, 
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
-
-            html2pdf().set(opt).from(element).save();
-        }
+        render();
     </script>
 </body>
 </html>
