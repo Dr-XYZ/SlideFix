@@ -3,184 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MD2PDF</title>
+    <title>MD2PDF (LaTeX 防切斷版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
     <script>
         window.MathJax = {
-            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
-            svg: { fontCache: 'global' },
-            startup: { typeset: false }
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$']],
+                processEscapes: true
+            },
+            svg: {
+                fontCache: 'global' 
+            },
+            startup: {
+                typeset: false // 我們手動呼叫渲染
+            }
         };
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     
     <style>
-        /* --- 全局變數 --- */
-        :root { --primary: #009688; --gray: #f0f2f5; --border: #dcdcdc; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; background: #525659; }
         
-        /* --- 螢幕顯示樣式 (Screen Style) --- */
-        body { 
-            margin: 0; display: flex; flex-direction: column; height: 100vh; 
-            font-family: 'Segoe UI', sans-serif; background: var(--gray); overflow: hidden;
-        }
+        header { background: #333; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
         
-        header { 
-            background: var(--primary); color: white; padding: 0 20px; height: 60px;
-            display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-
-        .main-container { display: flex; flex: 1; height: calc(100vh - 60px); }
+        .container { display: flex; flex: 1; overflow: hidden; }
+        .pane { width: 50%; display: flex; flex-direction: column; }
         
-        .pane { width: 50%; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+        /* 編輯區 */
+        textarea { 
+            flex: 1; padding: 20px; border: none; resize: none; outline: none; 
+            font-family: 'Consolas', monospace; font-size: 15px; line-height: 1.6;
+        }
+
+        /* 預覽區 (PDF 模擬) */
+        #preview-pane { flex: 1; padding: 20px; overflow-y: auto; display: flex; justify-content: center; }
         
-        .pane-label {
-            background: #e0e0e0; padding: 5px 15px; font-size: 12px; font-weight: bold; color: #555;
-            text-transform: uppercase; letter-spacing: 1px;
+        #content {
+            background: white;
+            width: 210mm; /* A4 */
+            min-height: 297mm;
+            padding: 20mm;
+            box-sizing: border-box; 
+            color: #333;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
         }
 
-        textarea {
-            flex: 1; padding: 20px; resize: none; border: none; outline: none;
-            font-family: 'Consolas', monospace; font-size: 14px; line-height: 1.5; background: #fafafa;
-        }
-
-        #preview-scroll { flex: 1; padding: 30px; overflow-y: auto; background: white; }
-
-        /* --- 文件的核心樣式 (Markdown 內容) --- */
-        #content { max-width: 800px; margin: 0 auto; color: #333; line-height: 1.6; }
+        /* --- 🔥 核心防切斷 CSS 🔥 --- */
         
-        /* 表格關鍵樣式 */
-        table { 
-            width: 100%; border-collapse: collapse; margin: 20px 0; 
-            border: 2px solid #333; /* 外框加粗 */
+        /* 1. 一般元素防切斷 */
+        p, h1, h2, h3, li, blockquote, pre, table, img {
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
-        th, td { border: 1px solid #888; padding: 8px 12px; text-align: left; }
-        th { background-color: #f2f2f2; border-bottom: 2px solid #333; font-weight: bold; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
 
-        h1, h2, h3 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 0.3em; margin-top: 1.5em; }
-        code { background: #eee; padding: 2px 5px; border-radius: 3px; font-family: monospace; color: #d63384; }
-        pre { background: #282c34; color: #abb2bf; padding: 15px; border-radius: 5px; overflow-x: auto; page-break-inside: avoid; }
-        blockquote { border-left: 4px solid var(--primary); padding-left: 15px; color: #666; background: #f9f9f9; margin: 10px 0; }
-        img { max-width: 100%; height: auto; }
-
-        /* 按鈕樣式 */
-        .btn {
-            background: white; color: var(--primary); border: none; padding: 8px 16px;
-            border-radius: 4px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block;
+        /* 2. 重點：數學公式保護殼 */
+        /* 這會確保整個區塊公式要麼在這一頁顯示完，要麼整個跳到下一頁 */
+        .math-protect {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            display: block;
+            margin: 1em 0; /* 給公式一點呼吸空間 */
         }
-        .btn:hover { background: #e0f2f1; }
 
-        /* --- 🖨️ 關鍵：列印模式 (Print Mode) --- 
-           當用戶按下 Ctrl+P 或點擊按鈕時，CSS 會變成這樣
-        */
-        @media print {
-            /* 隱藏介面元素 */
-            header, .pane-label, .pane:first-child, ::-webkit-scrollbar { 
-                display: none !important; 
-            }
+        /* 樣式美化 */
+        h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; border: 1px solid #ccc; }
+        th, td { border: 1px solid #ccc; padding: 8px; }
+        th { background: #f0f0f0; }
+        pre { background: #282c34; color: #abb2bf; padding: 15px; border-radius: 4px; overflow-x: auto; }
+        code { background: #eee; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
 
-            /* 重置佈局 */
-            body, .main-container, .pane, #preview-scroll { 
-                height: auto; overflow: visible; display: block; background: white; margin: 0; padding: 0;
-            }
-
-            /* 預覽區佔滿全版 */
-            .pane { width: 100%; border: none; }
-            #preview-scroll { padding: 0; }
-            #content { max-width: 100%; margin: 0; }
-
-            /* ★★★ 核心魔法：表格分頁設定 ★★★ */
-            table { page-break-inside: auto; }
-            tr    { page-break-inside: avoid; page-break-after: auto; }
-            thead { display: table-header-group; } /* 這行指示瀏覽器在每一頁重複表頭 */
-            tfoot { display: table-footer-group; }
-            
-            /* 其他分頁控制 */
-            h1, h2, h3 { page-break-after: avoid; } /* 標題後不換頁 */
-            pre, blockquote, img, mjx-container { page-break-inside: avoid; } /* 內容不切斷 */
-
-            /* 設定紙張邊距 (隱藏瀏覽器預設頁眉頁尾) */
-            @page {
-                margin: 20mm;
-                size: A4;
-            }
-        }
+        button { padding: 8px 15px; cursor: pointer; background: #4CAF50; color: white; border: none; font-size: 1rem; border-radius: 4px; }
     </style>
 </head>
 <body>
+
     <header>
-        <div style="font-size: 1.2rem; font-weight: bold;">MD2PDF 專業版 (重複表頭)</div>
-        <button class="btn" onclick="window.print()">🖨️ 列印 / 另存 PDF</button>
+        <div style="font-weight: bold;">MD2PDF (LaTeX 強力修復版)</div>
+        <button onclick="downloadPDF()">下載 PDF</button>
     </header>
 
-    <div class="main-container">
+    <div class="container">
         <div class="pane">
-            <div class="pane-label">Markdown Editor</div>
-            <textarea id="editor"># 長表格測試
+            <textarea id="editor" placeholder="輸入 Markdown..."># LaTeX 防切斷測試
 
-這個範例展示了「原生列印」如何處理跨頁表頭重複。
+這是一個測試。請確保下方的長公式不會被切成兩半。
 
-## 財務報表 (長表格)
-
-請注意：當表格跨越到第二頁時，**表頭 (項目/數值/備註)** 會自動重複顯示。
-
-| 項目 (ID) | 數值 (Value) | 備註 (Notes) | 狀態 (Status) |
-| :--- | :--- | :--- | :--- |
-| Data 001 | $1,000 | 這是測試數據 | ✅ OK |
-| Data 002 | $2,500 | 自動分頁測試 | ✅ OK |
-| Data 003 | $3,200 | 數學公式 $\sqrt{x}$ | ⚠️ Low |
-| Data 004 | $4,100 | 重複表頭測試 | ✅ OK |
-| Data 005 | $5,000 | 應該在第一頁 | ✅ OK |
-| Data 006 | $1,000 | 測試數據填充 | ✅ OK |
-| Data 007 | $2,500 | 測試數據填充 | ✅ OK |
-| Data 008 | $3,200 | 測試數據填充 | ⚠️ Low |
-| Data 009 | $4,100 | 測試數據填充 | ✅ OK |
-| Data 010 | $5,000 | 測試數據填充 | ✅ OK |
-| Data 011 | $1,000 | 測試數據填充 | ✅ OK |
-| Data 012 | $2,500 | 測試數據填充 | ✅ OK |
-| Data 013 | $3,200 | 測試數據填充 | ⚠️ Low |
-| Data 014 | $4,100 | 測試數據填充 | ✅ OK |
-| Data 015 | $5,000 | 測試數據填充 | ✅ OK |
-| Data 016 | $1,000 | 測試數據填充 | ✅ OK |
-| Data 017 | $2,500 | 測試數據填充 | ✅ OK |
-| Data 018 | $3,200 | 測試數據填充 | ⚠️ Low |
-| Data 019 | $4,100 | 測試數據填充 | ✅ OK |
-| Data 020 | $5,000 | 測試數據填充 | ✅ OK |
-| Data 021 | $1,000 | 測試數據填充 | ✅ OK |
-| Data 022 | $2,500 | 測試數據填充 | ✅ OK |
-| Data 023 | $3,200 | 測試數據填充 | ⚠️ Low |
-| Data 024 | $4,100 | 測試數據填充 | ✅ OK |
-| Data 025 | $5,000 | 測試數據填充 | ✅ OK |
-| Data 026 | $1,000 | 測試數據填充 | ✅ OK |
-| Data 027 | $2,500 | 測試數據填充 | ✅ OK |
-| Data 028 | $3,200 | 測試數據填充 | ⚠️ Low |
-| Data 029 | $4,100 | 測試數據填充 | ✅ OK |
-| Data 030 | $5,000 | 測試數據填充 | ✅ OK |
-| Data 031 | $1,000 | 測試數據填充 | ✅ OK |
-| Data 032 | $2,500 | 測試數據填充 | ✅ OK |
-| Data 033 | $3,200 | 測試數據填充 | ⚠️ Low |
-| Data 034 | $4,100 | 測試數據填充 | ✅ OK |
-| Data 035 | $5,000 | 測試數據填充 | ✅ OK |
-| Data 036 | $1,000 | 測試數據填充 | ✅ OK |
-| Data 037 | $2,500 | 測試數據填充 | ✅ OK |
-| Data 038 | $3,200 | 測試數據填充 | ⚠️ Low |
-| Data 039 | $4,100 | 測試數據填充 | ✅ OK |
-| Data 040 | $5,000 | 測試數據填充 | ✅ OK |
-
-## 物理公式
+## 馬克士威方程組
 
 $$
-F = G \frac{m_1 m_2}{r^2}
+\begin{aligned}
+\nabla \cdot \mathbf{E} &= \frac{\rho}{\varepsilon_0} \\
+\nabla \cdot \mathbf{B} &= 0 \\
+\nabla \times \mathbf{E} &= -\frac{\partial \mathbf{B}}{\partial t} \\
+\nabla \times \mathbf{B} &= \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}
+\end{aligned}
 $$
+
+## 矩陣測試 (確保整塊移動)
+
+這是一段廢話文字，用來把頁面填滿，好讓下一個公式剛好卡在分頁處。這是一段廢話文字。這是一段廢話文字。
+
+$$
+\mathbf{A} = \begin{pmatrix}
+a_{11} & a_{12} & \cdots & a_{1n} \\
+a_{21} & a_{22} & \cdots & a_{2n} \\
+\vdots & \vdots & \ddots & \vdots \\
+a_{m1} & a_{m2} & \cdots & a_{mn}
+\end{pmatrix}
+$$
+
+## 行內公式
+這是一個行內公式 $E=mc^2$ 的測試，它應該隨文流動。
             </textarea>
         </div>
-        
-        <div class="pane">
-            <div class="pane-label">Live Preview</div>
-            <div id="preview-scroll">
-                <div id="content"></div>
-            </div>
+        <div class="pane" id="preview-pane">
+            <div id="content"></div>
         </div>
     </div>
 
@@ -189,37 +131,87 @@ $$
         const content = document.getElementById('content');
         let mathCache = {};
 
-        // 數學公式保護與還原邏輯
+        // 1. 抓出 LaTeX 並暫存 (避免被 marked 解析壞)
         function escapeMath(text) {
-            mathCache = {}; let i = 0;
-            text = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, t) => { mathCache[`MB_${i}`] = {t, d:true}; return `MB_${i++}`; });
-            text = text.replace(/\$([^\$\n]+?)\$/g, (m, t) => { mathCache[`MI_${i}`] = {t, d:false}; return `MI_${i++}`; });
+            mathCache = {}; 
+            let i = 0;
+            // 抓區塊公式 $$...$$
+            text = text.replace(/\$\$([\s\S]*?)\$\$/g, (m, t) => { 
+                const key = `MATH_BLOCK_${i++}`;
+                mathCache[key] = { tex: t, isBlock: true };
+                return key; 
+            });
+            // 抓行內公式 $...$
+            text = text.replace(/\$([^\$\n]+?)\$/g, (m, t) => { 
+                const key = `MATH_INLINE_${i++}`;
+                mathCache[key] = { tex: t, isBlock: false };
+                return key; 
+            });
             return text;
         }
 
+        // 2. 還原 LaTeX 並加上「保護殼」
         function restoreMath(html) {
-            for (let k in mathCache) html = html.replace(k, mathCache[k].d ? `$$${mathCache[k].t}$$` : `$${mathCache[k].t}$`);
+            for (const key in mathCache) {
+                const item = mathCache[key];
+                if (item.isBlock) {
+                    // 🔥 關鍵修改：用 div.math-protect 包住區塊公式 🔥
+                    // 這樣 CSS 的 break-inside: avoid 才能抓到它
+                    html = html.replace(key, `<div class="math-protect">$$${item.tex}$$</div>`);
+                } else {
+                    html = html.replace(key, `$${item.tex}$`);
+                }
+            }
             return html;
         }
 
-        // 渲染函數
+        // 3. 渲染流程
         function render() {
             let md = editor.value;
+            // A. 保護公式
             md = escapeMath(md);
-            // 讓 marked 解析表格
+            // B. 轉 HTML
             let html = marked.parse(md);
+            // C. 還原公式 (含保護殼)
             html = restoreMath(html);
+            // D. 放入 DOM
             content.innerHTML = html;
             
-            // 觸發 MathJax
-            if(window.MathJax && window.MathJax.typesetPromise) {
-                window.MathJax.typesetPromise([content]).catch(()=>{});
+            // E. 呼叫 MathJax 渲染
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([content]).catch(err => console.log(err));
             }
         }
 
-        editor.addEventListener('input', render);
+        // 監聽輸入 (加一點延遲避免頻繁渲染卡頓)
+        let timer;
+        editor.addEventListener('input', () => {
+            clearTimeout(timer);
+            timer = setTimeout(render, 300);
+        });
+        
         // 初始化
-        render();
+        setTimeout(render, 500);
+
+        // 4. 下載 PDF
+        function downloadPDF() {
+            const element = document.getElementById('content');
+            
+            const opt = {
+                margin:       0, // 這裡設0，依靠 CSS padding
+                filename:     'latex-fixed.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { 
+                    scale: 2, 
+                    useCORS: true,
+                    scrollY: 0 // 防止滾動導致截圖位置偏移
+                },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+
+            html2pdf().set(opt).from(element).save();
+        }
     </script>
 </body>
 </html>
