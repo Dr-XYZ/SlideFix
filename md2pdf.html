@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MD2PDF V9 (邊距修正版)</title>
+    <title>MD2PDF V10 (絕對座標修復版)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -11,97 +11,104 @@
     <script>
         window.MathJax = {
             tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
-            svg: { fontCache: 'none' },
+            svg: { fontCache: 'none' }, // 禁用緩存以確保轉圖正常
             startup: { typeset: false }
         };
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 
     <style>
+        /* 全局重置 */
         * { box-sizing: border-box; }
-        body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #333; font-family: sans-serif; }
+        body { margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; background: #2b2b2b; font-family: sans-serif; }
         
+        /* 頂部導航 */
         header { 
-            height: 50px; background: #222; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #444;
+            height: 50px; background: #1a1a1a; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #444; 
         }
-        
+
+        /* 主區域 */
         .main { display: flex; flex: 1; overflow: hidden; }
         
         /* 編輯區 */
-        .editor { width: 50%; border-right: 1px solid #444; display: flex; flex-direction: column; }
+        .editor-area { width: 50%; display: flex; flex-direction: column; border-right: 1px solid #444; }
         textarea { 
-            flex: 1; background: #1e1e1e; color: #ddd; border: none; padding: 20px; resize: none; outline: none; font-family: monospace; line-height: 1.6; font-size: 14px;
+            flex: 1; width: 100%; background: #1e1e1e; color: #e0e0e0; border: none; padding: 20px; 
+            resize: none; outline: none; font-family: 'Consolas', monospace; font-size: 14px; line-height: 1.6;
         }
 
-        /* 預覽區 */
-        .preview { 
+        /* 預覽區 (顯示用紙張) */
+        .preview-area { 
             width: 50%; background: #525659; overflow-y: auto; display: flex; justify-content: center; padding: 30px; 
         }
 
-        /* A4 紙張 */
+        /* A4 紙張本體 (螢幕顯示用) */
         #paper {
             background: white;
             width: 210mm;
             min-height: 297mm;
-            /* 預覽時我們保留 padding 讓你看起來像紙張 */
-            padding: 20mm; 
-            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            padding: 20mm; /* 螢幕上看到的邊距 */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
             color: #333;
+            font-size: 16px;
+            line-height: 1.5;
         }
 
         /* 內容樣式 */
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; border: 2px solid #333; }
-        th, td { border: 1px solid #999; padding: 6px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; border: 2px solid #000; }
+        th, td { border: 1px solid #666; padding: 8px; }
+        th { background: #f0f0f0; }
         img { max-width: 100%; }
+        hr { border: 0; border-top: 2px solid #eee; margin: 20px 0; }
         
-        /* 防切斷 */
-        p, h1, h2, h3, li, table, pre, .math-container { 
-            page-break-inside: avoid; break-inside: avoid; 
+        /* --- 核心防切斷設定 --- */
+        p, h1, h2, h3, li, table, pre, .math-block { 
+            page-break-inside: avoid; 
+            break-inside: avoid; 
         }
-        .math-container { text-align: center; margin: 1em 0; }
-        
-        /* Loading */
+
+        /* Loading 遮罩 */
         #loading {
-            position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); color:white; display:none; flex-direction:column; justify-content:center; align-items:center; z-index:999;
+            position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); 
+            color:white; display:none; flex-direction:column; justify-content:center; align-items:center; z-index:9999;
         }
     </style>
 </head>
 <body>
 
     <div id="loading">
-        <div style="font-size: 20px; margin-bottom: 10px;">正在生成 PDF...</div>
-        <div style="font-size: 14px; color: #aaa;">正在校準邊距與渲染公式</div>
+        <div style="font-size: 24px; margin-bottom: 15px; font-weight: bold;">正在處理 PDF...</div>
+        <div style="color: #aaa;">正在校準座標並柵格化公式</div>
     </div>
 
     <header>
-        <div>MD2PDF V9 (防切邊版)</div>
-        <button onclick="downloadPDF()" style="cursor:pointer; background:#2980b9; color:white; border:none; padding:6px 15px; border-radius:4px;">下載 PDF</button>
+        <div style="font-weight: bold; letter-spacing: 1px;">MD2PDF V10 (Final Fix)</div>
+        <button onclick="downloadPDF()" style="cursor:pointer; background:#007acc; color:white; border:none; padding:8px 20px; border-radius:4px; font-weight:bold;">
+            下載 PDF
+        </button>
     </header>
 
     <div class="main">
-        <div class="editor">
-            <textarea id="input"># 邊距測試報告
+        <div class="editor-area">
+            <textarea id="input" placeholder="輸入內容..."># Chemistry Formula Sheet
 
-請檢查左側文字是否完整，不應被切斷。
+## 9: Covalent Bonding: Orbitals
 
-## 1. 邊緣測試
-This is a test sentence to check the left margin.
-這是一段測試文字，用來檢查左邊距是否正常。
+Order (鍵級)
+鍵的穩定性 : $$ \text{Bond Order} = \frac{\text{No. of bonding electrons} - \text{No. of anti-bonding electrons}}{2} $$
 
-## 2. 表格測試 (全寬)
-| 測試項目 | 結果 | 備註 |
-|:---|:---|:---|
-| 左邊距 | ✅ Pass | 文字未被切斷 |
-| 上邊距 | ✅ Pass | 頁眉正常 |
-| 數學公式 | ✅ Pass | 圖片化渲染 |
+## 10: Liquids and Solids
+Bragg Equation (布拉格方程式) :
+$$ n\lambda = 2d \sin \theta $$
 
-## 3. 數學公式
-$$
-E = \frac{mc^2}{\sqrt{1-\frac{v^2}{c^2}}}
-$$
+## 測試邊界 (確保左邊不切斷)
+| 測試項目 | 狀態 |
+| :--- | :--- |
+| Left Margin | ✅ OK |
+| Math Rendering | ✅ OK |
             </textarea>
         </div>
-        <div class="preview">
+        <div class="preview-area">
             <div id="paper"></div>
         </div>
     </div>
@@ -111,54 +118,64 @@ $$
         const paper = document.getElementById('paper');
         const loading = document.getElementById('loading');
 
-        // --- 1. 渲染 (Markdown + LaTeX佔位) ---
+        // --- 1. 渲染邏輯 (修復 MB0 問題) ---
         function render() {
             let md = input.value;
             let mathStore = [];
             
-            // 保護 LaTeX
-            md = md.replace(/\$\$([\s\S]*?)\$\$/g, (m, t) => {
-                mathStore.push({t, type:'block'}); return `___MB${mathStore.length-1}___`;
+            // 使用純字母佔位符，避免 Marked 解析器誤判
+            // 抓取區塊公式 $$...$$
+            md = md.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
+                mathStore.push({ tex: tex, type: 'block' });
+                return `MATHBLOCK${mathStore.length - 1}END`;
             });
-            md = md.replace(/\$([^\$\n]+?)\$/g, (m, t) => {
-                mathStore.push({t, type:'inline'}); return `___MI${mathStore.length-1}___`;
+            // 抓取行內公式 $...$
+            md = md.replace(/\$([^\$\n]+?)\$/g, (match, tex) => {
+                mathStore.push({ tex: tex, type: 'inline' });
+                return `MATHINLINE${mathStore.length - 1}END`;
             });
 
+            // Markdown 轉 HTML
             let html = marked.parse(md);
 
             // 還原 LaTeX
-            html = html.replace(/___MB(\d+)___/g, (m, i) => `<div class="math-container">$$${mathStore[i].t}$$</div>`);
-            html = html.replace(/___MI(\d+)___/g, (m, i) => `$${mathStore[i].t}$`);
+            html = html.replace(/MATHBLOCK(\d+)END/g, (match, id) => {
+                return `<div class="math-block">$$${mathStore[id].tex}$$</div>`;
+            });
+            html = html.replace(/MATHINLINE(\d+)END/g, (match, id) => {
+                return `$${mathStore[id].tex}$`;
+            });
 
             paper.innerHTML = html;
 
+            // 觸發 MathJax
             if(window.MathJax && window.MathJax.typesetPromise) {
                 window.MathJax.typesetPromise([paper]);
             }
         }
 
+        // 監聽輸入
         let timer;
         input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 300); });
-        setTimeout(render, 500);
+        setTimeout(render, 500); // 初始化
 
-        // --- 2. 轉圖片 (防公式跑版) ---
-        async function rasterize() {
-            const svgs = paper.querySelectorAll('mjx-container svg');
+
+        // --- 2. 轉圖片函數 (針對特定容器) ---
+        async function rasterizeContainer(container) {
+            const svgs = container.querySelectorAll('mjx-container svg');
             for(let svg of svgs) {
                 try {
                     const rect = svg.getBoundingClientRect();
-                    if(rect.width<1) continue;
-                    
+                    if(rect.width < 1) continue; // 跳過未渲染的
+
                     const xml = new XMLSerializer().serializeToString(svg);
                     const svg64 = btoa(unescape(encodeURIComponent(xml)));
-                    
                     const img = new Image();
                     img.src = 'data:image/svg+xml;base64,' + svg64;
                     await new Promise(r => img.onload = r);
 
                     const canvas = document.createElement('canvas');
-                    // 放大3倍保持清晰
-                    canvas.width = rect.width * 3;
+                    canvas.width = rect.width * 3; // 3倍解析度
                     canvas.height = rect.height * 3;
                     const ctx = canvas.getContext('2d');
                     ctx.scale(3, 3);
@@ -166,61 +183,63 @@ $$
 
                     const finalImg = document.createElement('img');
                     finalImg.src = canvas.toDataURL('image/png');
-                    finalImg.style.width = rect.width + 'px';
+                    finalImg.style.width = rect.width + 'px'; // 保持原始大小
                     
-                    const container = svg.closest('mjx-container');
-                    if(container) container.replaceWith(finalImg);
+                    const wrapper = svg.closest('mjx-container');
+                    if(wrapper) wrapper.replaceWith(finalImg);
                 } catch(e) { console.error(e); }
             }
         }
 
-        // --- 3. 下載 PDF (修復邊距的核心) ---
+        // --- 3. 下載 PDF (替身截圖法 - 修復左側切斷) ---
         async function downloadPDF() {
             loading.style.display = 'flex';
             
-            // A. 保存狀態
-            const originalContent = paper.innerHTML;
-            const originalStyle = paper.getAttribute('style'); // 保存原本的 padding
+            // 步驟 A: 建立替身 (Clone)
+            // 我們複製一份 paper，並把它強制貼在 body 的 (0,0) 位置
+            // 這樣 html2canvas 就絕對不會抓錯座標
+            const clone = paper.cloneNode(true);
             
-            // B. 圖片化公式
-            await rasterize();
-
-            // C. 🔥 關鍵修改：生成時移除 CSS padding，改用 PDF margin 🔥
-            // 這樣 html2canvas 就會從 (0,0) 開始截圖，絕對不會切左邊
-            paper.style.padding = '0'; 
-            paper.style.boxShadow = 'none'; // 移除陰影避免干擾計算
-
-            const opt = {
-                // 這裡設定 PDF 的邊距 (上, 左, 下, 右)
-                // 設為 20mm，等同於原本的 CSS padding
-                margin:       [20, 20, 20, 20], 
-                filename:     'md2pdf_v9.pdf',
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { 
-                    scale: 2, 
-                    useCORS: true,
-                    scrollX: 0, // 強制歸零
-                    scrollY: 0, // 強制歸零
-                    // 稍微調大一點寬度容錯
-                    windowWidth: 1000 
-                },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-            };
+            // 設定替身樣式：絕對定位、置左上、固定寬度、移除邊距(交給PDF處理)
+            clone.style.position = 'absolute';
+            clone.style.left = '0';
+            clone.style.top = '0';
+            clone.style.width = '210mm'; // 鎖定 A4 寬度
+            clone.style.padding = '0';   // 移除內距，內容貼齊邊緣
+            clone.style.margin = '0';
+            clone.style.zIndex = '-9999'; // 藏在最下面
+            clone.style.background = 'white';
+            
+            document.body.appendChild(clone);
 
             try {
-                await html2pdf().set(opt).from(paper).save();
+                // 步驟 B: 將替身裡的公式轉為圖片
+                // (因為 MathJax SVG 在 PDF 裡會跑版，必須轉圖)
+                await rasterizeContainer(clone);
+
+                // 步驟 C: 生成 PDF
+                const opt = {
+                    margin:       [15, 15, 15, 15], // 上下左右留白 15mm
+                    filename:     'chemistry_formula.pdf',
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { 
+                        scale: 2, 
+                        useCORS: true,
+                        scrollX: 0, 
+                        scrollY: 0 
+                    },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+                };
+
+                // 對這個「替身」進行截圖，而不是對螢幕上的預覽區截圖
+                await html2pdf().set(opt).from(clone).save();
+
             } catch(e) {
                 alert('錯誤: ' + e.message);
             } finally {
-                // D. 還原
-                paper.innerHTML = originalContent;
-                if(originalStyle) paper.setAttribute('style', originalStyle);
-                else paper.style.padding = '20mm'; // 預設值
-                
-                // 重新渲染 MathJax
-                if(window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise([paper]);
-                
+                // 步驟 D: 清理戰場
+                document.body.removeChild(clone);
                 loading.style.display = 'none';
             }
         }
