@@ -3,210 +3,326 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MD2PDF 穩定輸出版</title>
+    <title>MD2PDF Ultimate</title>
     
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$']],
+                processEscapes: true
+            },
+            svg: {
+                fontCache: 'none' // 關鍵：禁用緩存，確保每個公式都是獨立完整的 SVG
+            },
+            startup: {
+                typeset: false // 手動控制渲染時機
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
     <style>
-        /* --- 基礎 UI --- */
-        body { margin: 0; height: 100vh; display: flex; flex-direction: column; font-family: sans-serif; background: #333; }
+        /* --- 系統重置 --- */
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #2b2b2b; }
+
+        /* --- 頂部工具列 --- */
+        header {
+            height: 60px; background: #1e1e1e; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #333;
+        }
+        h1 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: 1px; }
         
-        header { 
-            height: 50px; background: #222; color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; 
+        button {
+            background: #007acc; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; font-weight: 600; transition: background 0.2s;
+        }
+        button:hover { background: #0062a3; }
+        button:disabled { background: #555; cursor: not-allowed; }
+
+        /* --- 主區域 --- */
+        .main-layout { display: flex; flex: 1; overflow: hidden; }
+
+        /* 左側編輯器 */
+        .editor-container { width: 50%; height: 100%; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        textarea {
+            flex: 1; width: 100%; background: #1e1e1e; color: #d4d4d4; border: none; padding: 20px; resize: none; outline: none; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; line-height: 1.6;
         }
 
-        .main { display: flex; flex: 1; overflow: hidden; }
-        
-        /* 編輯區 */
-        .editor { width: 50%; height: 100%; border-right: 1px solid #444; }
-        textarea { 
-            width: 100%; height: 100%; border: none; padding: 20px; box-sizing: border-box; 
-            resize: none; outline: none; font-family: monospace; font-size: 14px; 
-        }
-
-        /* 預覽區 (這裡是關鍵) */
-        .preview { 
-            width: 50%; height: 100%; background: #525659; overflow-y: auto; 
-            display: flex; justify-content: center; padding: 20px; box-sizing: border-box;
+        /* 右側預覽區 (模擬 PDF 閱讀器背景) */
+        .preview-container {
+            width: 50%; height: 100%; background: #525659; overflow-y: auto; display: flex; justify-content: center; padding: 30px;
         }
 
         /* A4 紙張本體 */
         #paper {
             background: white;
-            width: 210mm; 
+            width: 210mm;
             min-height: 297mm;
             padding: 20mm;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            color: black;
-            /* 讓內容撐開高度，不要設死 height */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            color: #24292e;
+            font-size: 16px;
+            line-height: 1.6;
         }
 
-        /* --- 內容樣式 --- */
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; border: 2px solid #000; }
-        th, td { border: 1px solid #666; padding: 8px; }
-        img { max-width: 100%; }
+        /* --- 內容樣式 (Markdown 渲染後) --- */
+        #paper h1, #paper h2, #paper h3 { border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; margin-top: 24px; margin-bottom: 16px; color: #24292e; }
+        #paper p { margin-bottom: 16px; }
+        #paper code { background-color: #f6f8fa; padding: 0.2em 0.4em; border-radius: 6px; font-family: monospace; font-size: 85%; }
+        #paper pre { background-color: #f6f8fa; padding: 16px; overflow: auto; border-radius: 6px; line-height: 1.45; }
+        #paper pre code { background: none; padding: 0; font-size: 100%; }
+        #paper blockquote { padding: 0 1em; color: #6a737d; border-left: 0.25em solid #dfe2e5; margin: 0 0 16px 0; }
+        #paper table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+        #paper th, #paper td { padding: 6px 13px; border: 1px solid #dfe2e5; }
+        #paper tr:nth-child(2n) { background-color: #f6f8fa; }
+        #paper img { max-width: 100%; box-sizing: content-box; background-color: #fff; }
+
+        /* --- 🔥 核心：防切斷與 LaTeX 樣式 🔥 --- */
         
-        /* 防切斷 (分頁控制) */
-        p, h1, h2, h3, li, table, pre, .math-protect { 
-            page-break-inside: avoid; 
-            break-inside: avoid; 
+        /* 1. 強制這些元素不要在內部換頁 */
+        p, h1, h2, h3, li, ul, ol, table, pre, blockquote, .math-block-container, img {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        /* 2. 數學公式容器 */
+        .math-block-container {
+            display: block;
+            margin: 1em 0;
+            text-align: center;
+            overflow-x: hidden; /* 防止公式太長撐破版面 */
         }
         
-        /* 下載時的狀態遮罩 */
-        #status {
-            position: fixed; bottom: 20px; right: 20px; 
-            background: #27ae60; color: white; padding: 10px 20px; 
-            border-radius: 5px; display: none; font-weight: bold;
+        /* 3. 圖片化後的公式樣式 */
+        img.math-img-block { display: block; margin: 0 auto; max-width: 100%; }
+        img.math-img-inline { vertical-align: middle; }
+
+        /* --- Loading 遮罩 --- */
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); color: white; display: none; justify-content: center; align-items: center; z-index: 9999; flex-direction: column;
         }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007acc; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
-
-    <script>
-        window.MathJax = {
-            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
-            svg: { fontCache: 'none' }, 
-            startup: { typeset: false }
-        };
-    </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
 
+    <div id="loading">
+        <div class="spinner"></div>
+        <div id="loading-text">正在處理數學公式與排版...</div>
+    </div>
+
     <header>
-        <div>MD2PDF (Debug版)</div>
-        <button onclick="makePDF()" style="cursor:pointer; padding:5px 15px; font-size:14px;">下載 PDF</button>
+        <h1>MD2PDF PRO</h1>
+        <button id="btn-download" onclick="generatePDF()">下載 PDF</button>
     </header>
 
-    <div class="main">
-        <div class="editor">
-            <textarea id="input" oninput="run()"># PDF 空白測試
+    <div class="main-layout">
+        <div class="editor-container">
+            <textarea id="input" placeholder="請在此輸入 Markdown 與 LaTeX..."># 完整測試報告
 
-請測試下載後是否有內容。
+## 1. 簡介
+這是一個測試 Markdown 轉 PDF 的文件，重點在於測試 **LaTeX 公式** 以及 **分頁不切斷** 的功能。
 
-## 1. 列表測試
-- 項目 A
-- 項目 B
-
-## 2. 表格測試
-| ID | 數值 |
-|:---|:---|
-| 01 | 100 |
-| 02 | 200 |
-
-## 3. 公式測試
+## 2. 複雜數學公式 (區塊)
+馬克士威方程組：
 $$
-x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}
+\begin{aligned}
+\nabla \cdot \mathbf{E} &= \frac{\rho}{\varepsilon_0} \\
+\nabla \cdot \mathbf{B} &= 0 \\
+\nabla \times \mathbf{E} &= -\frac{\partial \mathbf{B}}{\partial t} \\
+\nabla \times \mathbf{B} &= \mu_0\mathbf{J} + \mu_0\varepsilon_0\frac{\partial \mathbf{E}}{\partial t}
+\end{aligned}
 $$
+
+## 3. 分數與根號測試
+一定要確保分數線清晰可見：
+$$
+f(x) = \sqrt{1+\frac{x^2}{2}} + \int_{-\infty}^{\infty} e^{-x^2} dx
+$$
+
+## 4. 表格測試 (防切斷)
+表格應該完整顯示，或者整塊移到下一頁。
+
+| 參數 | 數值 | 描述 |
+|:---|:---|:---|
+| Alpha | 0.001 | 學習率 |
+| Beta  | 0.9   | 動量參數 |
+| Gamma | 1e-5  | 正則化項 |
+| Delta | 3.14  | 圓周率近似 |
+
+## 5. 行內公式
+這是一段文字，其中包含行內公式 $E = mc^2$ 以及 $e^{i\pi} + 1 = 0$，確保它們與文字對齊。
             </textarea>
         </div>
-        <div class="preview">
+        <div class="preview-container">
             <div id="paper"></div>
         </div>
     </div>
 
-    <div id="status">正在生成 PDF...</div>
-
     <script>
         const input = document.getElementById('input');
         const paper = document.getElementById('paper');
-        const status = document.getElementById('status');
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loading-text');
 
-        // --- 1. 基礎 Markdown 渲染 ---
-        function run() {
-            let md = input.value;
-            
-            // 簡單的數學公式保護 (避免 marked 吃掉 LaTeX)
-            let cache = [];
-            md = md.replace(/\$\$([\s\S]*?)\$\$/g, (m) => { cache.push(m); return `___MB${cache.length-1}___`; });
-            md = md.replace(/\$([^\$\n]+?)\$/g, (m) => { cache.push(m); return `___MI${cache.length-1}___`; });
+        // --- 1. 渲染引擎 (Markdown + LaTeX 保護) ---
+        function render() {
+            const raw = input.value;
+            let mathStorage = [];
 
-            let html = marked.parse(md);
+            // A. 保護 LaTeX：使用特殊 Token 替換 $$...$$ 和 $...$
+            // 使用 UUID 或複雜字串防止衝突
+            let protectedText = raw.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
+                mathStorage.push({ type: 'block', tex: tex });
+                return `___MATH_BLOCK_${mathStorage.length - 1}___`;
+            });
 
-            // 還原公式
-            cache.forEach((tex, i) => {
-                // 如果是區塊公式，加個 div 包起來 (防切斷用)
-                const isBlock = tex.startsWith('$$');
-                const tag = isBlock ? `<div class="math-protect">${tex}</div>` : tex;
-                html = html.replace(`___MB${i}___`, tag).replace(`___MI${i}___`, tag);
+            protectedText = protectedText.replace(/\$([^\$\n]+?)\$/g, (match, tex) => {
+                mathStorage.push({ type: 'inline', tex: tex });
+                return `___MATH_INLINE_${mathStorage.length - 1}___`;
+            });
+
+            // B. Marked 解析 HTML
+            let html = marked.parse(protectedText);
+
+            // C. 還原 LaTeX 並加上容器
+            html = html.replace(/___MATH_BLOCK_(\d+)___/g, (match, index) => {
+                // 區塊公式：用 div 包裹，並加上防切斷 class
+                return `<div class="math-block-container">$$${mathStorage[index].tex}$$</div>`;
+            });
+
+            html = html.replace(/___MATH_INLINE_(\d+)___/g, (match, index) => {
+                // 行內公式
+                return `$${mathStorage[index].tex}$`;
             });
 
             paper.innerHTML = html;
 
-            // 觸發 MathJax
-            if(window.MathJax && window.MathJax.typesetPromise) {
-                window.MathJax.typesetPromise([paper]);
+            // D. 觸發 MathJax 渲染 (異步)
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([paper]).catch(err => console.error(err));
             }
         }
 
+        // 監聽輸入 (防抖動)
+        let debounceTimer;
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(render, 300);
+        });
+
         // 初始化
-        setTimeout(run, 500);
+        setTimeout(render, 500);
 
 
-        // --- 2. SVG 轉 圖片 (解決 LaTeX 跑版與空白問題) ---
-        async function rasterizeMath() {
-            const svgs = paper.querySelectorAll('svg');
+        // --- 2. 關鍵技術：SVG 柵格化 (SVG -> PNG) ---
+        // 這是解決 PDF 空白、跑版、缺字的唯一正解
+        async function rasterizeMathJax() {
+            const svgs = paper.querySelectorAll('mjx-container svg');
+            loadingText.innerText = `正在優化 ${svgs.length} 個數學公式...`;
+
             for (let svg of svgs) {
                 try {
                     const rect = svg.getBoundingClientRect();
-                    if (rect.width < 1 || rect.height < 1) continue;
+                    if (rect.width <= 0 || rect.height <= 0) continue;
 
+                    // 1. 序列化 SVG
                     const xml = new XMLSerializer().serializeToString(svg);
+                    const svg64 = btoa(unescape(encodeURIComponent(xml)));
+                    const imgSrc = 'data:image/svg+xml;base64,' + svg64;
+
+                    // 2. 載入到 Image 對象
+                    const img = new Image();
+                    await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                        img.src = imgSrc;
+                    });
+
+                    // 3. 繪製到 Canvas (放大 3 倍以保持高清)
+                    const scale = 3;
                     const canvas = document.createElement('canvas');
-                    const scale = 3; 
                     canvas.width = rect.width * scale;
                     canvas.height = rect.height * scale;
-                    
-                    const img = new Image();
-                    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
-                    
-                    await new Promise(r => img.onload = r);
-                    
                     const ctx = canvas.getContext('2d');
                     ctx.scale(scale, scale);
                     ctx.drawImage(img, 0, 0);
 
+                    // 4. 轉為 PNG DataURL
+                    const pngUrl = canvas.toDataURL('image/png');
+
+                    // 5. 創建替換用的 IMG 標籤
                     const finalImg = document.createElement('img');
-                    finalImg.src = canvas.toDataURL('image/png');
-                    finalImg.style.width = rect.width + 'px';
-                    finalImg.style.verticalAlign = 'middle';
+                    finalImg.src = pngUrl;
+                    finalImg.style.width = `${rect.width}px`; // 維持原始視覺尺寸
+                    finalImg.style.height = `${rect.height}px`;
                     
-                    // 替換
-                    const container = svg.parentNode;
-                    if(container) {
-                         container.parentNode.replaceChild(finalImg, container);
-                    }
-                } catch(e) { console.error(e); }
+                    // 區分行內或區塊
+                    const container = svg.closest('mjx-container');
+                    const isBlock = container.getAttribute('display') === 'true';
+                    finalImg.className = isBlock ? 'math-img-block' : 'math-img-inline';
+
+                    // 6. 替換 DOM
+                    container.parentNode.replaceChild(finalImg, container);
+
+                } catch (e) {
+                    console.error("公式轉換失敗:", e);
+                }
             }
         }
 
-        // --- 3. 生成 PDF ---
-        async function makePDF() {
-            status.style.display = 'block';
-            
-            // A. 先把公式轉成圖片 (這是防止空白的關鍵)
-            await rasterizeMath();
+        // --- 3. 生成 PDF 主流程 ---
+        async function generatePDF() {
+            loading.style.display = 'flex';
+            const btn = document.getElementById('btn-download');
+            btn.disabled = true;
 
-            // B. 直接對頁面上的 #paper 進行截圖
-            // 不使用 clone，直接抓看得到的東西
-            const opt = {
-                margin: 0,
-                filename: 'document.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { 
-                    scale: 2, 
-                    useCORS: true,
-                    windowWidth: 1000 // 強制設定寬度，避免響應式佈局導致變形
-                },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-            };
+            try {
+                // 步驟 1: 備份當前 HTML (因為轉圖片會破壞原本的可編輯性)
+                const originalHTML = paper.innerHTML;
 
-            await html2pdf().set(opt).from(paper).save();
-            
-            status.style.display = 'none';
-            
-            // C. 為了讓使用者能繼續編輯，重新渲染一次 (恢復成可編輯的 SVG 狀態)
-            run();
+                // 步驟 2: 將所有 MathJax SVG 轉為 PNG
+                await rasterizeMathJax();
+
+                // 步驟 3: 設定 html2pdf 參數
+                const opt = {
+                    margin: 0, // 邊距設為 0，由 CSS padding 控制
+                    filename: 'document_v8.pdf',
+                    image: { type: 'jpeg', quality: 0.98 }, // 使用高畫質 JPEG
+                    html2canvas: { 
+                        scale: 2, // 提高整體解析度
+                        useCORS: true, 
+                        scrollY: 0,
+                        windowWidth: 1000 // 強制寬度，防止手機版型跑掉
+                    },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } // 啟用所有分頁保護
+                };
+
+                // 步驟 4: 生成並下載
+                loadingText.innerText = "正在生成 PDF 文件...";
+                await html2pdf().set(opt).from(paper).save();
+
+                // 步驟 5: 還原預覽區 (讓用戶可以繼續編輯)
+                paper.innerHTML = originalHTML;
+                // 重新綁定 MathJax 事件 (因為 DOM 被重置了)
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise([paper]);
+                }
+
+            } catch (err) {
+                alert("生成失敗: " + err.message);
+                console.error(err);
+            } finally {
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
         }
     </script>
 </body>
